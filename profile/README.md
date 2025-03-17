@@ -4,7 +4,7 @@ Welcome to the official GitHub profile of Marbust Technology Company. We are a d
 
 ## About Us
 
-Established in 2007, Marbust Technology Company has evolved from offering hardware and software services to delivering comprehensive digital solutions. With over a decade of experience, we are committed to transforming ideas into unique digital experiences that drive growth and success for businesses worldwide. :contentReference[oaicite:0]{index=0}
+Established in 2007, Marbust Technology Company has evolved from offering hardware and software services to delivering comprehensive digital solutions. With over a decade of experience, we are committed to transforming ideas into unique digital experiences that drive growth and success for businesses worldwide.
 
 ## Our Services
 
