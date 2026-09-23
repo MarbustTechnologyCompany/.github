@@ -12,21 +12,21 @@
 
 - [ ] Tests enfocados
 - [ ] `tsc` sin errores (`npx tsc --noEmit` backend · `tsc -p tsconfig.app.json --noEmit` frontend)
-- [ ] QA de Codex o Claude (revisión del diff + verificación)
+- [ ] Revisión de código + verificación del diff
 
 ## Evidencia de release
 
 <!-- Marca SOLO los gates probados. Escribe N/A con motivo para lo que no aplique. Un PR mergeado NO prueba deploy/migración/UAT. -->
 
 - [ ] Revisión de código + CI
-- [ ] Migración / ALTER aplicado y verificado (si tocó entidades; prod `synchronize:false`)
+- [ ] Migración / ALTER aplicado y verificado (si tocó entidades)
 - [ ] Listo para desplegar
 - [ ] Smoke autenticado en navegador
-- [ ] **Aprobado por MarbustTechnologyCompany** (el autor —MarAntBQ— no se auto-aprueba)
-- [ ] **Activación en producción aprobada explícitamente por Marco**
+- [ ] Revisado y aprobado por el revisor asignado (el autor no se auto-aprueba)
+- [ ] Activación en producción aprobada explícitamente por el responsable
 
 N/A o gates pendientes:
 
 ## Seguridad y operaciones
 
-<!-- Migración de datos, PII, movimiento de dinero, SRI, efectos en proveedores, feature flags, rollback o condiciones de stop. Escribe N/A si no aplica. -->
+<!-- Migración de datos, PII, movimiento de dinero, impuestos, efectos en proveedores, feature flags, rollback o condiciones de stop. Escribe N/A si no aplica. -->
