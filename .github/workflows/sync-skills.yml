@@ -1,0 +1,130 @@
+name: sync-skills (reusable)
+
+# Workflow REUSABLE. Cada repo lo llama desde su propio .github/workflows/sync-skills.yml:
+#
+#   jobs:
+#     sync:
+#       uses: MarbustTechnologyCompany/.github/.github/workflows/sync-skills.yml@main
+#       secrets: inherit                 # pasa el secret SKILLS_DEPLOY_KEY del repo
+#       with:
+#         skills: trabajar-un-issue,escribir-un-issue,revisar-codigo
+#
+# Copia las skills designadas desde el directorio oficial ClaudeSkills (solo lectura)
+# y abre un PR si cambiaron. No edites a mano la copia del repo: se sincroniza desde aquí.
+
+on:
+  workflow_call:
+    inputs:
+      skills:
+        description: 'Skills a sincronizar, separadas por coma'
+        required: true
+        type: string
+      dest:
+        description: 'Carpeta destino de las skills dentro del repo (ruta relativa)'
+        required: false
+        type: string
+        default: .claude/skills
+    secrets:
+      SKILLS_DEPLOY_KEY:
+        description: 'Deploy key read-only de MarbustTechnologyCompany/ClaudeSkills'
+        required: true
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: sync-skills-${{ github.repository }}
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validar la carpeta destino
+        env:
+          DEST: ${{ inputs.dest }}
+        run: |
+          set -euo pipefail
+          case "$DEST" in
+            -*|/*|*..*) echo "::error::dest inválido: $DEST"; exit 1 ;;
+          esac
+
+      - name: Clonar el directorio oficial de skills (solo lectura)
+        env:
+          KEY: ${{ secrets.SKILLS_DEPLOY_KEY }}
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          printf '%s\n' "$KEY" > ~/.ssh/skills_key
+          chmod 600 ~/.ssh/skills_key
+          # Clave de host ed25519 oficial de GitHub, fijada (no ssh-keyscan dinámico).
+          printf 'github.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl\n' > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+          GIT_SSH_COMMAND="ssh -i ~/.ssh/skills_key -o IdentitiesOnly=yes -o UserKnownHostsFile=$HOME/.ssh/known_hosts" \
+            git clone --depth=1 git@github.com:MarbustTechnologyCompany/ClaudeSkills.git /tmp/claudeskills
+
+      - name: Copiar las skills designadas
+        env:
+          SKILLS: ${{ inputs.skills }}
+          DEST: ${{ inputs.dest }}
+        run: |
+          set -euo pipefail
+          mkdir -p -- "$DEST"
+          IFS=',' read -ra LIST <<< "$SKILLS"
+          for raw in "${LIST[@]}"; do
+            s="$(echo "$raw" | xargs)"
+            [ -n "$s" ] || continue
+            # Nombre de skill seguro: solo [A-Za-z0-9._-], sin "/", sin "..", sin empezar con "-".
+            case "$s" in
+              -*|*/*|*..*) echo "::error::skill inválida: $s"; exit 1 ;;
+            esac
+            if ! printf '%s' "$s" | grep -qE '^[A-Za-z0-9._-]+$'; then
+              echo "::error::skill inválida: $s"; exit 1
+            fi
+            src="/tmp/claudeskills/$s/SKILL.md"
+            if [ ! -f "$src" ]; then
+              echo "::error::La skill '$s' no existe en ClaudeSkills"; exit 1
+            fi
+            mkdir -p -- "$DEST/$s"
+            cp -- "$src" "$DEST/$s/SKILL.md"
+          done
+
+      - name: Abrir PR si hay cambios
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DEST: ${{ inputs.dest }}
+        run: |
+          set -euo pipefail
+          git add -- "$DEST"
+          if git diff --cached --quiet; then
+            echo "Las skills ya están al día; sin PR."
+            exit 0
+          fi
+          SHORT="$(git -C /tmp/claudeskills rev-parse --short HEAD)"
+          BR="chore/sync-skills-${SHORT}"
+          if git ls-remote --exit-code --heads origin "$BR" >/dev/null 2>&1; then
+            echo "Ya existe la rama $BR para este commit de ClaudeSkills; nada que hacer en esta corrida."
+            exit 0
+          fi
+          # Novedad según la clase del repo destino (producto exige pública+hito; cliente/interno solo interna)
+          CLASE="$(node -e "try{process.stdout.write(require('./.github/marbust.json').clase||'interno')}catch(e){process.stdout.write('interno')}" 2>/dev/null || echo interno)"
+          if [ "$CLASE" = "producto" ]; then
+            NOV=$'- pública: ninguna\n- interna: skills oficiales sincronizadas desde ClaudeSkills@'"$SHORT"$'\n- hito: no'
+          else
+            NOV=$'- interna: skills oficiales sincronizadas desde ClaudeSkills@'"$SHORT"
+          fi
+          git config user.name "marbust-skills-sync"
+          git config user.email "noreply@marbust.com"
+          git checkout -b "$BR"
+          git commit -m "chore: sincronizar skills oficiales desde ClaudeSkills@${SHORT}"
+          git push -u origin "$BR"
+          BODY="$(printf '## Resumen\nSincroniza las skills base desde el directorio oficial MarbustTechnologyCompany/ClaudeSkills@%s. Copia automática: no edites a mano las skills del repo; una mejora nace en el directorio oficial y se propaga.\n\n## Novedad\n\n%s\n\n## Cómo probar\nRevisar el diff de %s: coincide con la versión oficial.\n\n---\n\n> Generado por el Action reusable sync-skills. Entra por squash.' "$SHORT" "$NOV" "$DEST")"
+          gh pr create --title "chore: sincronizar skills oficiales (ClaudeSkills@${SHORT})" --body "$BODY"
+
+      - name: Limpiar la deploy key
+        if: always()
+        run: rm -f ~/.ssh/skills_key ~/.ssh/known_hosts
