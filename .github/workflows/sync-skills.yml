@@ -20,7 +20,7 @@ on:
         required: true
         type: string
       dest:
-        description: 'Carpeta destino de las skills dentro del repo'
+        description: 'Carpeta destino de las skills dentro del repo (ruta relativa)'
         required: false
         type: string
         default: .claude/skills
@@ -33,12 +33,25 @@ permissions:
   contents: write
   pull-requests: write
 
+concurrency:
+  group: sync-skills-${{ github.repository }}
+  cancel-in-progress: false
+
 jobs:
   sync:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
+
+      - name: Validar la carpeta destino
+        env:
+          DEST: ${{ inputs.dest }}
+        run: |
+          set -euo pipefail
+          case "$DEST" in
+            -*|/*|*..*) echo "::error::dest inválido: $DEST"; exit 1 ;;
+          esac
 
       - name: Clonar el directorio oficial de skills (solo lectura)
         env:
@@ -48,7 +61,9 @@ jobs:
           mkdir -p ~/.ssh && chmod 700 ~/.ssh
           printf '%s\n' "$KEY" > ~/.ssh/skills_key
           chmod 600 ~/.ssh/skills_key
-          ssh-keyscan -t ed25519 github.com >> ~/.ssh/known_hosts 2>/dev/null
+          # Clave de host ed25519 oficial de GitHub, fijada (no ssh-keyscan dinámico).
+          printf 'github.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl\n' > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
           GIT_SSH_COMMAND="ssh -i ~/.ssh/skills_key -o IdentitiesOnly=yes -o UserKnownHostsFile=$HOME/.ssh/known_hosts" \
             git clone --depth=1 git@github.com:MarbustTechnologyCompany/ClaudeSkills.git /tmp/claudeskills
 
@@ -58,19 +73,25 @@ jobs:
           DEST: ${{ inputs.dest }}
         run: |
           set -euo pipefail
-          mkdir -p "$DEST"
+          mkdir -p -- "$DEST"
           IFS=',' read -ra LIST <<< "$SKILLS"
           for raw in "${LIST[@]}"; do
             s="$(echo "$raw" | xargs)"
             [ -n "$s" ] || continue
+            # Nombre de skill seguro: solo [A-Za-z0-9._-], sin "/", sin "..", sin empezar con "-".
+            case "$s" in
+              -*|*/*|*..*) echo "::error::skill inválida: $s"; exit 1 ;;
+            esac
+            if ! printf '%s' "$s" | grep -qE '^[A-Za-z0-9._-]+$'; then
+              echo "::error::skill inválida: $s"; exit 1
+            fi
             src="/tmp/claudeskills/$s/SKILL.md"
             if [ ! -f "$src" ]; then
               echo "::error::La skill '$s' no existe en ClaudeSkills"; exit 1
             fi
-            mkdir -p "$DEST/$s"
-            cp "$src" "$DEST/$s/SKILL.md"
+            mkdir -p -- "$DEST/$s"
+            cp -- "$src" "$DEST/$s/SKILL.md"
           done
-          rm -f ~/.ssh/skills_key
 
       - name: Abrir PR si hay cambios
         env:
@@ -78,7 +99,7 @@ jobs:
           DEST: ${{ inputs.dest }}
         run: |
           set -euo pipefail
-          git add "$DEST"
+          git add -- "$DEST"
           if git diff --cached --quiet; then
             echo "Las skills ya están al día; sin PR."
             exit 0
@@ -86,7 +107,7 @@ jobs:
           SHORT="$(git -C /tmp/claudeskills rev-parse --short HEAD)"
           BR="chore/sync-skills-${SHORT}"
           if git ls-remote --exit-code --heads origin "$BR" >/dev/null 2>&1; then
-            echo "Ya existe la rama $BR (PR pendiente); nada que hacer."
+            echo "Ya existe la rama $BR para este commit de ClaudeSkills; nada que hacer en esta corrida."
             exit 0
           fi
           # Novedad según la clase del repo destino (producto exige pública+hito; cliente/interno solo interna)
@@ -103,3 +124,7 @@ jobs:
           git push -u origin "$BR"
           BODY="$(printf '## Resumen\nSincroniza las skills base desde el directorio oficial MarbustTechnologyCompany/ClaudeSkills@%s. Copia automática: no edites a mano las skills del repo; una mejora nace en el directorio oficial y se propaga.\n\n## Novedad\n\n%s\n\n## Cómo probar\nRevisar el diff de %s: coincide con la versión oficial.\n\n---\n\n> Generado por el Action reusable sync-skills. Entra por squash.' "$SHORT" "$NOV" "$DEST")"
           gh pr create --title "chore: sincronizar skills oficiales (ClaudeSkills@${SHORT})" --body "$BODY"
+
+      - name: Limpiar la deploy key
+        if: always()
+        run: rm -f ~/.ssh/skills_key ~/.ssh/known_hosts
