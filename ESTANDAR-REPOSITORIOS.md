@@ -65,9 +65,13 @@ El detalle vive en el `CONTRIBUTING.md` de la empresa (y el de cada repo lo refe
 3. **Rama** nueva — el trabajo **nunca** va directo a `main`.
 4. **PR** — lo envía **`MarAntBQ`** (o quien implemente, con su cuenta). Se abre en **borrador** con la plantilla llena, vincula el issue (`Closes #N` / `Refs #N`, en inglés).
 5. **QA** — **Codex participa siempre**: si Codex implementó, el QA lo hace Claude, y al revés. Antes del PR se corre la skill `revisar-codigo` sobre el propio diff.
-6. **Aprobación** — aprueba **`MarbustTechnologyCompany`** (el autor **no** se auto-aprueba: separación autor↔revisor).
-7. **Squash** — un issue, un PR, un commit. Se borra la rama.
-8. **Producción** — recién después del merge. Los repos con auto-deploy despliegan al mergear; los demás, con el OK explícito del responsable.
+6. **Revisión en el PR, como un equipo real.** El revisor deja su veredicto **en el PR, con la cuenta `MarbustTechnologyCompany`**:
+   - Si encuentra defectos → **"Solicitar cambios" (Request changes)** con los hallazgos concretos (`[bug]`/`[suggestion]`/`[nit]`, con `file:line` y la corrección).
+   - El autor (`MarAntBQ`) corrige, **responde en el PR** y lo marca listo para re-revisión.
+   - El revisor **re-revisa**. Esto se repite hasta que el PR pase. El autor **nunca** se auto-aprueba.
+7. **Aprobación** — solo cuando el PR pasa, la cuenta `MarbustTechnologyCompany` lo **aprueba** (separación autor↔revisor). Marco Antonio confirma antes del merge.
+8. **Squash** — un issue, un PR, un commit. Se borra la rama.
+9. **Producción** — recién después del merge. Los repos con auto-deploy despliegan al mergear; los demás, con el OK explícito del responsable.
 
 **Commits:** con tipo (`feat`, `fix`, `docs`, `chore`, `refactor`, `test`, `perf`), en español. **Prohibido** agregar líneas de co-autoría de herramientas de IA, en commits y en PRs.
 
@@ -75,7 +79,7 @@ El detalle vive en el `CONTRIBUTING.md` de la empresa (y el de cada repo lo refe
 
 ## 4. Novedades automáticas desde los PRs
 
-Ningún README ni ningún sitio documenta los cambios **a mano**. Las novedades **salen solas de los PRs mergeados**. La parte pública funciona como el **newsroom de lo que desarrolla la empresa**: solo mejoras y funcionalidades de **nuestros productos**.
+La idea es que **ningún README ni ningún sitio documente los cambios a mano**: cada PR deja su novedad en una sección fija, y de ahí se publica. **Hoy lo que existe y es obligatorio** es esa sección en el PR y su **validación** (el formato/política que se describen abajo). La **publicación automática** —juntar los PRs mergeados y mostrarlos en el newsroom público de **developers.marbust.com**— es la pieza que se está construyendo (Parte 4 del plan del estándar); mientras tanto, la sección Novedad bien escrita en cada PR es lo que la alimentará cuando esté. La parte pública es el **newsroom de lo que desarrolla la empresa**: solo mejoras y funcionalidades de **nuestros productos**.
 
 La plantilla de PR de **todos** los repos trae esta sección:
 
@@ -93,13 +97,13 @@ cualquiera: nada de vulnerabilidades, infraestructura, nombres de clientes ni da
 - **pública:** qué cambia para el cliente o el usuario, en una frase. Ej.: «MediMarbust ya incluye facturación electrónica.»
 - **interna:** qué cambió para el equipo (puede mencionar módulos, decisiones técnicas, issues).
 - **hito:** `sí` cuando es un logro público destacado del producto; `no` el resto.
-- Los PRs de dependencias (`dependabot`, `renovate`) y los marcados `ninguna` no generan novedad.
+- Los PRs marcados `ninguna` no generan novedad. A los **bots de dependencias** (`dependabot[bot]` y `renovate[bot]`, por login + `user.type === "Bot"`) el checker les **salta todos los checks** —título y Novedad—, no solo la novedad.
 - **Arreglos de seguridad:** la línea pública **nunca** describe la falla. Como mucho: «Mejoras de seguridad.»
 - El revisor del PR revisa **también** la línea pública: si pone en riesgo la seguridad o expone algo interno, es un `[bug]` que bloquea.
 
-**En repos de clase `cliente` e `interno`, la plantilla de PR va sin las líneas `pública` ni `hito`** (solo `interna`), y el check las **rechaza** si aparecen.
+**Cada repo adapta su plantilla a mano según su clase** (GitHub no la cambia solo por la clase): en los repos `cliente` e `interno`, la sección Novedad de la plantilla va **sin las líneas `pública` ni `hito`** (solo `interna`), y el checker las **rechaza** si aparecen. En los `producto` van las tres.
 
-**El checker** (`.github/scripts/pr-checks.mjs`, con sus pruebas `pr-checks.test.mjs`) valida dos cosas: el **título** del PR (empieza con un tipo: `feat`/`fix`/`docs`/…) y la sección **Novedad** según la clase del repo (`producto` exige las tres líneas; `cliente`/`interno` solo `interna` y rechazan `pública`/`hito`). El workflow **`pr-checks.yml`** (check **Checks del PR**) corre el checker **de la rama base**, no el del PR, para que un PR no pueda saltárselo editando su propio checker; y exige que el PR vaya contra `main`.
+**El checker** (`.github/scripts/pr-checks.mjs`, con sus pruebas `pr-checks.test.mjs`) valida dos cosas: el **título** del PR (empieza con un tipo: `feat`/`fix`/`docs`/…) y la sección **Novedad** según la clase del repo (`producto` exige las tres líneas; `cliente`/`interno` solo `interna` y rechazan `pública`/`hito`). El workflow **`pr-checks.yml`** (check **Checks del PR**) corre el checker **de la rama base cuando ya existe** —así un PR no puede saltárselo editando su propio checker—; en el PR que **introduce** el checker (la base aún no lo tiene) corre el del PR como *bootstrap*, y las pruebas del script (`pr-checks.test.mjs`) siempre corren desde la versión del PR. Además exige que el PR vaya contra `main`.
 
 **Límite conocido (a decidir con Marco Antonio):** en repos privados de una **cuenta personal**, GitHub no permite *required status checks* ni protección de rama sin **GitHub Pro** (la API responde 403). Sin eso, un check en rojo no bloquea el merge y un PR podría editar su propio workflow. Hoy lo cubren la revisión (skill `revisar-codigo`) y la aprobación de la empresa. La decisión —pagar GitHub Pro vs. pasar los repos a la organización— la toma Marco Antonio.
 
