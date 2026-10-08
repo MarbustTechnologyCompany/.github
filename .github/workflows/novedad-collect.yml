@@ -1,0 +1,108 @@
+name: novedad-collect (reusable)
+
+# Workflow REUSABLE (Parte 4 del estándar §4). Cada repo clase `producto` lo llama
+# desde su propio .github/workflows/novedad-collect.yml:
+#
+#   on:
+#     pull_request:
+#       types: [closed]
+#       branches: [main]   # o [master]
+#   jobs:
+#     collect:
+#       uses: MarbustTechnologyCompany/.github/.github/workflows/novedad-collect.yml@main
+#       secrets: inherit   # pasa el secret NOVEDADES_INGEST_TOKEN del repo
+#
+# Al mergear un PR a la rama por defecto, extrae la línea `pública` (y `hito`) de la
+# sección Novedad del cuerpo del PR y la manda al colector del portal de desarrolladores,
+# donde entra como PENDING (curación). Solo actúa en repos cuyo .github/marbust.json
+# declara clase `producto`; en cliente/interno no hace nada.
+
+on:
+  workflow_call:
+    inputs:
+      ingest_url:
+        description: 'Endpoint del colector de novedades'
+        required: false
+        type: string
+        default: 'https://system.marbust.com/developers/novedades/ingest'
+    secrets:
+      NOVEDADES_INGEST_TOKEN:
+        description: 'Token de ingesta del portal de desarrolladores'
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  collect:
+    # Solo cuando el PR se MERGEÓ (no cuando se cierra sin mergear).
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Extraer la Novedad pública y enviarla al colector
+        env:
+          INGEST_URL: ${{ inputs.ingest_url }}
+          TOKEN: ${{ secrets.NOVEDADES_INGEST_TOKEN }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: |
+          set -euo pipefail
+
+          # Solo repos clase `producto`.
+          CLASE=$(node -e "try{process.stdout.write(String((require('./.github/marbust.json').clase)||''))}catch(e){process.stdout.write('')}")
+          if [ "$CLASE" != "producto" ]; then
+            echo "clase='$CLASE' (no es producto): no se recolecta novedad."
+            exit 0
+          fi
+          PRODUCTO=$(node -e "try{process.stdout.write(String((require('./.github/marbust.json').producto)||''))}catch(e){process.stdout.write('')}")
+
+          if [ -z "${TOKEN:-}" ]; then
+            echo "::error::NOVEDADES_INGEST_TOKEN no configurado en el repo."
+            exit 1
+          fi
+
+          # Extraer `pública` y `hito` de la sección Novedad del cuerpo del PR, y armar
+          # el JSON del request, todo en Node (maneja acentos, comillas y saltos de línea).
+          node - "$REPO" "$PRODUCTO" "$PR_NUMBER" "$PR_URL" > payload.json <<'NODE'
+          const [, , repo, producto, prNumber, prUrl] = process.argv;
+          const body = process.env.PR_BODY || '';
+          const pick = (re) => {
+            const m = body.match(re);
+            return m ? m[1].trim() : '';
+          };
+          // Linea tipo "- publica: <texto>" (con o sin tilde, hasta fin de linea).
+          let publica = pick(/^\s*[-*]\s*p(?:ú|u)blica\s*:\s*(.*)$/im);
+          const hitoRaw = pick(/^\s*[-*]\s*hito\s*:\s*(.*)$/im).toLowerCase();
+          const hito = hitoRaw === 'sí' || hitoRaw === 'si' || hitoRaw === 'true';
+          // Quitar comentarios HTML residuales por si acaso.
+          publica = publica.replace(/<!--[\s\S]*?-->/g, '').trim();
+          const skip = !publica || /^(ninguna|ninguno|n\/a|-)$/i.test(publica);
+          const out = { skip, repo, producto: producto || null, prNumber: Number(prNumber) || null, prUrl: prUrl || null, publica, hito };
+          process.stdout.write(JSON.stringify(out));
+          NODE
+
+          SKIP=$(node -e "process.stdout.write(String(require('./payload.json').skip))")
+          if [ "$SKIP" = "true" ]; then
+            echo "Novedad pública vacía o 'ninguna': no se envía nada."
+            exit 0
+          fi
+
+          echo "Enviando novedad pública de $REPO (PR #$PR_NUMBER) al colector..."
+          CODE=$(node -e "const p=require('./payload.json');const {skip,...d}=p;process.stdout.write(JSON.stringify(d))" \
+            | curl -s -o resp.txt -w '%{http_code}' --max-time 25 \
+                -X POST "$INGEST_URL" \
+                -H "Content-Type: application/json" \
+                -H "Authorization: Bearer $TOKEN" \
+                --data-binary @-)
+          echo "HTTP $CODE"
+          cat resp.txt || true
+          echo ""
+          if [ "$CODE" != "200" ] && [ "$CODE" != "201" ]; then
+            echo "::error::El colector respondió $CODE."
+            exit 1
+          fi
