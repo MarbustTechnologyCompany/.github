@@ -71,16 +71,29 @@ jobs:
           node - "$REPO" "$PRODUCTO" "$PR_NUMBER" "$PR_URL" > payload.json <<'NODE'
           const [, , repo, producto, prNumber, prUrl] = process.argv;
           const body = process.env.PR_BODY || '';
-          const pick = (re) => {
-            const m = body.match(re);
-            return m ? m[1].trim() : '';
-          };
-          // Linea tipo "- publica: <texto>" (con o sin tilde, hasta fin de linea).
+          // Aislar SOLO la sección "## Novedad" (mismo criterio que pr-checks.mjs):
+          // respeta bloques de código (fences ``` / ~~~) y saltea comentarios HTML; junta
+          // las líneas desde el encabezado "## Novedad" hasta el siguiente "## ".
+          function sectionLines(text) {
+            const out = [];
+            let found = false, fence = null;
+            for (const line of String(text).split(/\r?\n/)) {
+              const marker = line.match(/^\s*(`{3,}|~{3,})/);
+              if (marker) { if (fence === null) fence = marker[1]; else if (fence === marker[1]) fence = null; continue; }
+              if (fence !== null) continue;
+              if (/^\s*<!--/.test(line)) continue;
+              if (/^##[ \t]/.test(line)) { if (found) break; if (/^##[ \t]+Novedad[ \t]*$/i.test(line)) found = true; continue; }
+              if (found) out.push(line);
+            }
+            return found ? out : [];
+          }
+          const section = sectionLines(body).join('\n');
+          const pick = (re) => { const m = section.match(re); return m ? m[1].trim() : ''; };
+          // Linea tipo "- publica: <texto>" (con o sin tilde, hasta fin de linea), dentro de Novedad.
           let publica = pick(/^\s*[-*]\s*p(?:ú|u)blica\s*:\s*(.*)$/im);
           const hitoRaw = pick(/^\s*[-*]\s*hito\s*:\s*(.*)$/im).toLowerCase();
           const hito = hitoRaw === 'sí' || hitoRaw === 'si' || hitoRaw === 'true';
-          // Quitar comentarios HTML residuales por si acaso.
-          publica = publica.replace(/<!--[\s\S]*?-->/g, '').trim();
+          publica = publica.replace(/\s+/g, ' ').trim();
           const skip = !publica || /^(ninguna|ninguno|n\/a|-)$/i.test(publica);
           const out = { skip, repo, producto: producto || null, prNumber: Number(prNumber) || null, prUrl: prUrl || null, publica, hito };
           process.stdout.write(JSON.stringify(out));
