@@ -37,7 +37,7 @@ jobs:
   collect:
     # Solo cuando el PR se MERGEÓ (no cuando se cierra sin mergear).
     if: github.event.pull_request.merged == true
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
