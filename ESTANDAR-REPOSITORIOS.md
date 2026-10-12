@@ -70,10 +70,10 @@ El detalle vive en el `CONTRIBUTING.md` de la empresa (y el de cada repo lo refe
    - El autor (`MarAntBQ`) corrige, **responde en el PR** y lo marca listo para re-revisión.
    - El revisor **re-revisa**. Esto se repite hasta que el PR pase. El autor **nunca** se auto-aprueba.
 7. **Aprobación** — solo cuando el PR pasa, la cuenta `MarbustTechnologyCompany` lo **aprueba** (separación autor↔revisor). Marco Antonio confirma antes del merge.
-8. **Squash** — un issue, un PR, un commit. Se borra la rama.
+8. **Squash** — un issue, un PR, un commit. El commit lleva el título del PR y, en el cuerpo, **la lista de todo lo que se hizo** antes del `Closes #N`: quien lee el historial no tiene que adivinar ni abrir el issue. Se borra la rama.
 9. **Producción** — recién después del merge. Los repos con auto-deploy despliegan al mergear; los demás, con el OK explícito del responsable.
 
-**Commits:** con tipo (`feat`, `fix`, `docs`, `chore`, `refactor`, `test`, `perf`), en español. **Prohibido** agregar líneas de co-autoría de herramientas de IA, en commits y en PRs.
+**Commits:** con tipo (`feat`, `fix`, `docs`, `chore`, `refactor`, `test`, `perf`), en español. El de squash reescribe el cuerpo que GitHub propone (los "wip", "arreglo") por el resumen de lo hecho con `gh pr merge --squash --subject … --body …` (el ejemplo listo para copiar está en la skill `revisar-codigo` §7). **Prohibido** agregar líneas de co-autoría de herramientas de IA, en commits y en PRs.
 
 ---
 

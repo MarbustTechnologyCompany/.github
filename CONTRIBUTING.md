@@ -24,4 +24,4 @@ Un buen Issue permite decidir e implementar sin acceso a una conversación priva
 - Rama nueva por tarea; **el trabajo nunca va directo a `main`**.
 - Descripción con la plantilla: **Resumen · Issue vinculado · Verificación (real, con output) · Evidencia de release (solo gates probados) · Seguridad y operaciones**.
 - Marca **solo** la evidencia que de verdad pasó; `N/A` con motivo para lo que no aplique.
-- **Merge = squash** (1 commit por PR) + borrar la rama.
+- **Merge = squash** (1 commit por PR, con el título del PR y en el cuerpo la lista de todo lo que se hizo + `Closes #N`) + borrar la rama.
